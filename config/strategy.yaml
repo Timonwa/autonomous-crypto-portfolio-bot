@@ -32,11 +32,21 @@ earnRules:
 safety:
   maxLockedPercentage: 0.8
   minFlexPercentage: 0.2
-  allowSell: false
+  allowSell: false # Set to true only during rebalancing
   allowFutures: false
   allowMargin: false
   allowStructuredProducts: false
 
 schedule:
   type: cron
-  expression: "0 9 3 * *"
+  expression: "0 9 3 * *" # 9 AM on the 3rd of each month
+
+# ---- Yearly Rebalancing (Compulsory) ----
+# Runs every January to rebalance portfolio to target allocation.
+# If any asset's percentage is +/- tolerancePercent off target,
+# the bot will sell over-allocated assets and buy under-allocated ones.
+rebalance:
+  enabled: true
+  month: 1 # January
+  tolerancePercent: 5 # +/- 5% drift triggers rebalance
+  dayOfMonth: 15 # Run on January 15th

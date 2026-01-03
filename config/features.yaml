@@ -15,3 +15,28 @@ ai:
 
 ui:
   enabled: false
+  # Phase 1: Read-only dashboard (strategyEditing: false)
+  # Phase 2: Strategy editing via UI (strategyEditing: true)
+  strategyEditing: false
+
+# ---- Strategy Source ----
+# Where the bot reads its strategy from.
+#
+# Valid values:
+#   - "file": Strategy comes from config/strategy.yaml (default)
+#   - "database": Strategy comes from Supabase
+#
+# IMPORTANT RULES:
+#   - "database" is ONLY valid when:
+#     - ui.enabled = true
+#     - ui.strategyEditing = true
+#     - storage.enabled = true
+#   - The bot NEVER merges file and database strategies
+#   - One source. One truth.
+#
+# Configuration scenarios:
+#   Case 1: Bot-only           → strategySource: file
+#   Case 2: Bot + Storage      → strategySource: file (DB for logs only)
+#   Case 3: Bot + Storage + UI (read-only)  → strategySource: file
+#   Case 4: Bot + Storage + UI (editing)    → strategySource: database
+strategySource: file

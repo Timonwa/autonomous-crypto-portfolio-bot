@@ -15,13 +15,14 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 - **Biome setup** - Linting, formatting, import organization
 - **Strategy schema** - Zod validation for configuration (partial)
 - **Folder structure** - All directories and placeholder files created
+- **Feature flags** - Strategy source resolution and validation
 
 ### 📁 Project Structure
 
 ```
 /apps
   /bot-runner          # Main bot execution
-  /dashboard           # Next.js read-only UI
+  /dashboard           # Next.js UI (Phase 1: read-only, Phase 2: strategy editing)
 
 /packages
   /core                # Core business logic
@@ -39,6 +40,49 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 
 ---
 
+## Key Features
+
+### 1. Monthly Investment (Core)
+
+- Runs on a fixed schedule (e.g., 3rd of each month)
+- Buys assets according to allocation percentages
+- Allocates to earn products (staking/locked/flex)
+
+### 2. Yearly Rebalancing (Compulsory)
+
+- Runs every January (configurable day)
+- Checks if holdings are +/- 5% off target allocation
+- Sells over-allocated assets, buys under-allocated ones
+- Only time selling is permitted
+
+### 3. Strategy Editing via UI (Optional - Phase 2)
+
+- Requires read-only dashboard to be complete first
+- Allows updating allocation percentages via web UI
+- Strategy stored in database instead of config file
+
+---
+
+## Strategy Source Logic
+
+The strategy can come from **either** config file **or** database — never both.
+
+| Scenario | Modules Enabled | Strategy Source | Notes |
+|----------|-----------------|-----------------|-------|
+| Bot-only | core | `file` | No UI, no DB |
+| Bot + Storage | core + storage | `file` | DB for logs only |
+| Bot + Storage + UI (read-only) | core + storage + ui | `file` | Phase 1 dashboard |
+| Bot + Storage + UI (editing) | core + storage + ui (strategyEditing=true) | `database` | Phase 2 dashboard |
+
+**Key Rules:**
+
+- `strategySource: database` is ONLY valid when UI editing is enabled AND storage is enabled
+- The bot NEVER merges file and database strategies
+- One source. One truth.
+- Fail fast if invalid configuration detected
+
+---
+
 ## Implementation Phases
 
 ### Phase 1: Foundation (Core Types & Interfaces)
@@ -51,23 +95,28 @@ This document outlines the phased approach to building the Autonomous Crypto Por
    - `AssetBalance` - Current holdings per asset
    - `PortfolioSnapshot` - Point-in-time portfolio state
    - `EarnPosition` - Staking/locked/flex positions
-   - `TradeOrder` - Buy order representation
+   - `TradeOrder` - Buy/sell order representation
    - `RunResult` - Execution summary
-   - `Action` - Recorded action (buy, subscribe, etc.)
+   - `Action` - Recorded action (buy, sell, subscribe, etc.)
+   - `RebalanceResult` - Yearly rebalancing outcome
 
 2. **Define adapter interfaces**
    - `ExchangeAdapter` (`packages/exchange/adapter.ts`)
      - `getBalances(): Promise<AssetBalance[]>`
      - `getEarnPositions(): Promise<EarnPosition[]>`
      - `executeBuy(order: TradeOrder): Promise<TradeResult>`
+     - `executeSell(order: TradeOrder): Promise<TradeResult>` (for rebalancing)
      - `subscribeEarn(asset, product, amount): Promise<EarnResult>`
    - `StorageAdapter` (`packages/storage/adapter.ts`)
      - `saveSnapshot(snapshot: PortfolioSnapshot): Promise<void>`
      - `saveRun(run: RunResult): Promise<void>`
      - `saveAction(action: Action): Promise<void>`
+     - `getStrategy(): Promise<Strategy | null>` (for Phase 2)
+     - `saveStrategy(strategy: Strategy): Promise<void>` (for Phase 2)
    - `AlertAdapter` (`packages/alerts/adapter.ts`)
      - `sendRunStarted(): Promise<void>`
      - `sendRunCompleted(summary: RunResult): Promise<void>`
+     - `sendRebalanceCompleted(result: RebalanceResult): Promise<void>`
      - `sendError(error: Error): Promise<void>`
    - `AIAdapter` (`packages/ai/adapter.ts`)
      - `validatePlan(actions: Action[]): Promise<ValidationResult>`
@@ -75,11 +124,12 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 
 3. **Complete strategy schema** (`packages/strategy/schema.ts`)
    - Finalize all Zod schemas
+   - Add rebalancing configuration
    - Add refinements and constraints
    - Export inferred TypeScript types
 
 4. **Implement strategy loader** (`packages/strategy/loader.ts`)
-   - Load YAML configuration
+   - Load from YAML configuration OR database (based on flags)
    - Validate against schema
    - Return typed configuration
 
@@ -112,20 +162,31 @@ This document outlines the phased approach to building the Autonomous Crypto Por
    - Generate action plan (buys + earn subscriptions)
    - Handle partial fills and deficits
 
-4. **Guards** (`packages/core/guards.ts`)
+4. **Rebalancer** (`packages/core/rebalancer.ts`)
+   - Check if current month is January (or configured rebalance month)
+   - Compare current allocation percentages to targets
+   - Identify assets outside +/- tolerance threshold
+   - Generate sell orders for over-allocated assets
+   - Generate buy orders for under-allocated assets
+   - Respect locked positions (cannot sell locked assets)
+
+5. **Guards** (`packages/core/guards.ts`)
    - Validate configuration constraints
    - Check safety rules before execution
    - Fail-fast on violations
+   - Special handling: `allowSell` is only permitted during rebalancing
 
-5. **Core barrel export** (`packages/core/index.ts`)
+6. **Core barrel export** (`packages/core/index.ts`)
    - Export all modules
    - Provide `executePlan()` function
+   - Provide `executeRebalance()` function
 
 **Deliverables:**
 
 - Complete allocation calculation
 - Earn distribution logic
 - Reconciliation producing action plans
+- Yearly rebalancing logic
 - Safety guards preventing invalid operations
 
 ---
@@ -148,6 +209,7 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 
 3. **Trade execution** (`packages/exchange/binance/trades.ts`)
    - Market buy orders
+   - Market sell orders (for rebalancing only)
    - Quote calculation (USDT pairs)
    - Order confirmation
 
@@ -177,25 +239,30 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 #### Tasks
 
 1. **Main entry** (`apps/bot-runner/run.ts`)
-   - Load configuration
+   - Load configuration (from file or database based on flags)
+   - Validate feature flag combinations
    - Initialize adapters
-   - Execute reconciliation
+   - Determine run type (monthly investment vs yearly rebalance)
+   - Execute reconciliation or rebalancing
    - Run action plan
    - Record results
 
 2. **Lifecycle hooks** (`apps/bot-runner/lifecycle.ts`)
    - `beforeRun()` - Pre-execution checks
    - `afterRun()` - Cleanup and notifications
+   - `isRebalanceMonth()` - Check if January (or configured month)
    - Error handling wrapper
 
 3. **Cron wrapper** (`apps/bot-runner/cron.ts`)
    - Vercel cron-compatible handler
    - Environment-based configuration
    - Idempotency checks
+   - Support for both monthly and yearly schedules
 
 4. **Feature flags integration** (`packages/flags/`)
-   - Define all flags (alerts, storage, AI, etc.)
+   - Define all flags (alerts, storage, AI, strategySource, etc.)
    - Runtime flag resolution
+   - Validate flag combinations (fail fast on invalid config)
    - Graceful degradation
 
 **Deliverables:**
@@ -203,6 +270,7 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 - Executable bot with `pnpm run bot:run`
 - Cron-compatible endpoint
 - Feature flag control over optional modules
+- Yearly rebalancing triggered in January
 
 ---
 
@@ -224,9 +292,11 @@ This document outlines the phased approach to building the Autonomous Crypto Por
    - `runs.ts` - Save/query run history
    - `snapshots.ts` - Save/query portfolio snapshots
    - `actions.ts` - Save/query executed actions
+   - `strategy.ts` - Save/query strategy (for Phase 2 UI editing)
 
 4. **Database schema**
    - Create migrations for tables
+   - Include `strategies` table for Phase 2
    - Document schema in `/docs`
 
 **Deliverables:**
@@ -252,6 +322,7 @@ This document outlines the phased approach to building the Autonomous Crypto Por
    - Run started
    - Run completed (with summary)
    - Run failed (with error details)
+   - Rebalance completed (with trades summary)
    - Anomaly detected
 
 **Deliverables:**
@@ -262,9 +333,9 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 
 ---
 
-### Phase 7: Dashboard (Read-Only UI)
+### Phase 7: Dashboard Phase 1 (Read-Only UI)
 
-**Goal:** Build a Next.js dashboard for observability.
+**Goal:** Build a Next.js dashboard for observability. **Must be complete before Phase 8.**
 
 #### Tasks
 
@@ -282,6 +353,7 @@ This document outlines the phased approach to building the Autonomous Crypto Por
    - `GET /api/portfolio` - Current state
    - `GET /api/history` - Historical snapshots
    - `GET /api/runs` - Run history
+   - `GET /api/rebalances` - Rebalance history
    - All routes are **read-only**
 
 4. **UI components**
@@ -290,21 +362,76 @@ This document outlines the phased approach to building the Autonomous Crypto Por
    - Earn distribution breakdown
    - Run history table
    - Action audit log
+   - Rebalance history view
 
 5. **Pages**
    - `/` - Dashboard home
    - `/history` - Historical views
    - `/runs` - Run details
+   - `/rebalances` - Yearly rebalance history
 
 **Deliverables:**
 
 - Deployed dashboard on Vercel
 - Magic link authentication
 - Real-time portfolio visibility
+- Strategy source: `file` (read-only)
 
 ---
 
-### Phase 8: AI Integration (Optional)
+### Phase 8: Dashboard Phase 2 (Strategy Editing - Optional)
+
+**Goal:** Allow users to update portfolio strategy via the web UI.
+
+**Prerequisites:**
+
+- Phase 7 (Read-Only UI) must be complete and deployed
+- Storage (Supabase) must be enabled
+
+#### Tasks
+
+1. **Strategy API routes**
+   - `GET /api/strategy` - Get current strategy
+   - `PUT /api/strategy` - Update strategy
+   - Validation against Zod schema
+
+2. **Strategy editing UI**
+   - Allocation percentage editor
+   - Earn rules editor
+   - Monthly investment amount editor
+   - Validation feedback
+   - Confirmation dialog before save
+
+3. **Strategy storage**
+   - `packages/storage/supabase/strategy.ts`
+   - CRUD operations for strategy
+   - Version history (optional)
+
+4. **Feature flag updates**
+   - `ui.strategyEditing: true`
+   - `strategySource: database`
+   - Validation in loader
+
+5. **Migration**
+   - Tool to migrate config file to database
+   - One-time setup for existing users
+
+**Deliverables:**
+
+- Strategy editing via web UI
+- Strategy stored in database
+- Config file no longer used (when enabled)
+- Clear migration path from file to database
+
+**Important Rules:**
+
+- This feature is **optional**
+- Strategy comes from **either** file **or** database, never both
+- If `strategySource: database` but UI is disabled → fail fast
+
+---
+
+### Phase 9: AI Integration (Optional)
 
 **Goal:** Add AI-powered insights without affecting execution.
 
@@ -331,7 +458,7 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 
 ---
 
-### Phase 9: Scripts & Utilities
+### Phase 10: Scripts & Utilities
 
 **Goal:** Provide developer tooling.
 
@@ -341,19 +468,25 @@ This document outlines the phased approach to building the Autonomous Crypto Por
    - Execute full flow without trades
    - Print planned actions
    - Validate configuration
+   - Test rebalancing logic
 
 2. **Seed script** (`scripts/seed.ts`)
    - Populate test data
    - Create sample snapshots
 
+3. **Migration script** (`scripts/migrate-strategy.ts`)
+   - Migrate strategy from config file to database
+   - For users upgrading to Phase 8 (strategy editing)
+
 **Deliverables:**
 
 - `pnpm run dry-run` working
 - Development utilities
+- Strategy migration tool
 
 ---
 
-### Phase 10: Documentation & Deployment
+### Phase 11: Documentation & Deployment
 
 **Goal:** Complete documentation and production deployment.
 
@@ -423,30 +556,49 @@ earnRules:
 safety:
   maxLockedPercentage: 0.8
   minFlexPercentage: 0.2
-  allowSell: false
+  allowSell: false  # Set to true only during rebalancing
   allowFutures: false
   allowMargin: false
   allowStructuredProducts: false
 
 schedule:
   type: cron
-  expression: "0 9 3 * *"
+  expression: "0 9 3 * *"  # 9 AM on the 3rd of each month
+
+# Yearly Rebalancing (Compulsory)
+rebalance:
+  enabled: true
+  month: 1  # January
+  tolerancePercent: 5  # +/- 5% drift triggers rebalance
+  dayOfMonth: 15  # Run on January 15th
 ```
 
 ### `config/features.yaml`
 
 ```yaml
+exchange:
+  binance: true
+
 storage:
   enabled: true
   provider: supabase
 
 alerts:
   enabled: true
-  provider: telegram
+  telegram: true
 
 ai:
   enabled: false
   provider: adk-ts
+
+ui:
+  enabled: true
+  strategyEditing: false  # Phase 1: read-only, Phase 2: true
+
+# Strategy Source
+# - "file": Strategy from config/strategy.yaml (default)
+# - "database": Strategy from Supabase (only when ui.strategyEditing=true)
+strategySource: file
 ```
 
 ---
@@ -480,11 +632,13 @@ MAGIC_LINK_SECRET=
 
 - [ ] Bot executes monthly without manual intervention
 - [ ] Allocation stays within 5% tolerance of targets
+- [ ] Yearly rebalancing runs every January and corrects drift
 - [ ] Earn distribution follows configuration
 - [ ] All actions are recorded and auditable
 - [ ] Dashboard provides clear portfolio visibility
 - [ ] System can run unattended for 6+ months
 - [ ] Zero incidents of unauthorized or unexpected trades
+- [ ] Strategy source logic works correctly (file vs database)
 
 ---
 

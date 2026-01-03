@@ -32,7 +32,7 @@ export const EarnRulesSchema = z.record(AssetSymbol, EarnSplitSchema);
 export const SafetyRulesSchema = z.object({
   maxLockedPercentage: z.number().min(0).max(1).default(0.8),
   minFlexPercentage: z.number().min(0).max(1).default(0.2),
-  allowSell: z.literal(false),
+  allowSell: z.boolean().default(false),
   allowFutures: z.literal(false),
   allowMargin: z.literal(false),
   allowStructuredProducts: z.literal(false),
@@ -44,6 +44,17 @@ export const SafetyRulesSchema = z.object({
 export const ScheduleSchema = z.object({
   type: z.literal("cron"),
   expression: z.string(), // e.g. "0 9 1 * *"
+});
+
+/**
+ * ---- Yearly Rebalancing ----
+ * Runs every January to rebalance portfolio to target allocation
+ */
+export const RebalanceSchema = z.object({
+  enabled: z.literal(true), // Rebalancing is compulsory
+  month: z.number().min(1).max(12).default(1), // January = 1
+  tolerancePercent: z.number().min(0).max(100).default(5), // +/- 5% drift allowed
+  dayOfMonth: z.number().min(1).max(28).default(1), // Day to run rebalance
 });
 
 /**
@@ -65,6 +76,8 @@ export const StrategySchema = z.object({
   safety: SafetyRulesSchema,
 
   schedule: ScheduleSchema,
+
+  rebalance: RebalanceSchema,
 });
 
 export type Strategy = z.infer<typeof StrategySchema>;
