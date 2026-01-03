@@ -1,27 +1,18 @@
-import { z } from "zod"
+import { z } from "zod";
 
 /**
  * ---- Core Domain Types ----
  */
 
-export const AssetSymbol = z.enum([
-  "BTC",
-  "ETH",
-  "SOL",
-  "BNB",
-  "USDT",
-])
+export const AssetSymbol = z.enum(["BTC", "ETH", "SOL", "BNB", "USDT"]);
 
-export type AssetSymbol = z.infer<typeof AssetSymbol>
+export type AssetSymbol = z.infer<typeof AssetSymbol>;
 
 /**
  * ---- Allocation ----
  * How total capital is split across assets
  */
-export const AllocationSchema = z.record(
-  AssetSymbol,
-  z.number().min(0).max(1)
-)
+export const AllocationSchema = z.record(AssetSymbol, z.number().min(0).max(1));
 
 /**
  * ---- Earn Rules ----
@@ -31,12 +22,9 @@ export const EarnSplitSchema = z.object({
   staking: z.number().min(0).max(1).optional(),
   locked: z.number().min(0).max(1).optional(),
   flex: z.number().min(0).max(1).optional(),
-})
+});
 
-export const EarnRulesSchema = z.record(
-  AssetSymbol,
-  EarnSplitSchema
-)
+export const EarnRulesSchema = z.record(AssetSymbol, EarnSplitSchema);
 
 /**
  * ---- Safety Constraints ----
@@ -48,7 +36,7 @@ export const SafetyRulesSchema = z.object({
   allowFutures: z.literal(false),
   allowMargin: z.literal(false),
   allowStructuredProducts: z.literal(false),
-})
+});
 
 /**
  * ---- Bot Schedule ----
@@ -56,7 +44,7 @@ export const SafetyRulesSchema = z.object({
 export const ScheduleSchema = z.object({
   type: z.literal("cron"),
   expression: z.string(), // e.g. "0 9 1 * *"
-})
+});
 
 /**
  * ---- Root Strategy Schema ----
@@ -66,8 +54,8 @@ export const StrategySchema = z.object({
 
   allocation: AllocationSchema.refine(
     (alloc) => {
-      const total = Object.values(alloc).reduce((a, b) => a + b, 0)
-      return Math.abs(total - 1) < 0.0001
+      const total = Object.values(alloc).reduce((a, b) => a + b, 0);
+      return Math.abs(total - 1) < 0.0001;
     },
     { message: "Allocation must sum to 1.0" }
   ),
@@ -77,6 +65,6 @@ export const StrategySchema = z.object({
   safety: SafetyRulesSchema,
 
   schedule: ScheduleSchema,
-})
+});
 
-export type Strategy = z.infer<typeof StrategySchema>
+export type Strategy = z.infer<typeof StrategySchema>;

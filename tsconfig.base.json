@@ -24,7 +24,7 @@
       "@bot/exchange": ["packages/exchange/index.ts"],
       "@bot/flags": ["packages/flags/index.ts"],
       "@bot/storage": ["packages/storage/index.ts"],
-      "@bot/strategy": ["packages/strategy/index.ts"],
+      "@bot/strategy": ["packages/strategy/index.ts"]
     }
   }
 }
