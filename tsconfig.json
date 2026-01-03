@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/bot-runner" },
+    { "path": "./apps/dashboard" },
+    { "path": "./packages/ai" },
+    { "path": "./packages/alerts" },
+    { "path": "./packages/core" },
+    { "path": "./packages/exchange" },
+    { "path": "./packages/flags" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/strategy" }
+  ]
+}

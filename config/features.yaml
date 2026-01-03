@@ -1,0 +1,17 @@
+exchange:
+  binance: true
+
+storage:
+  enabled: false
+  provider: supabase
+
+alerts:
+  enabled: true
+  telegram: true
+
+ai:
+  enabled: false
+  provider: adk-ts
+
+ui:
+  enabled: false

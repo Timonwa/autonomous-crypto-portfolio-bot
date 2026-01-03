@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@bot/ai": ["packages/ai/index.ts"],
+      "@bot/alerts": ["packages/alerts/index.ts"],
+      "@bot/core": ["packages/core/index.ts"],
+      "@bot/exchange": ["packages/exchange/index.ts"],
+      "@bot/flags": ["packages/flags/index.ts"],
+      "@bot/storage": ["packages/storage/index.ts"],
+      "@bot/strategy": ["packages/strategy/index.ts"],
+    }
+  }
+}
