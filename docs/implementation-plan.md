@@ -54,8 +54,49 @@ This document outlines the phased approach to building the Autonomous Crypto Por
 - Checks if holdings are +/- 5% off target allocation
 - Sells over-allocated assets, buys under-allocated ones
 - Only time selling is permitted
+- Can trade liquid staking derivatives (with `allowLiquidStakingTrades: true`)
 
-### 3. Strategy Editing via UI (Optional - Phase 2)
+### 3. Staking Derivatives Handling
+
+Exchange staking may issue **derivative tokens** to represent staked positions. The system handles these with fully configurable mappings.
+
+#### Derivative Types
+
+| Type | Examples | Behavior |
+|------|----------|----------|
+| `liquid` | WBETH, BNSOL | Tradable. Trading = exiting staking exposure |
+| `non_tradable` | RWUSD | Must redeem first. Never count in portfolio |
+
+#### Key Rules
+
+1. **Base asset + liquid derivative = same exposure** (never both active)
+2. **Liquid derivatives are tradable** but only during rebalancing
+3. **Non-tradable wrappers are excluded** from portfolio calculations
+4. **Configuration is dynamic** - users define their own derivatives
+
+#### Configuration Example
+
+```yaml
+stakingDerivatives:
+  ETH:
+    symbol: WBETH
+    type: liquid
+  SOL:
+    symbol: BNSOL
+    type: liquid
+  USDT:
+    symbol: RWUSD
+    type: non_tradable
+    redeemsTo: USDC
+```
+
+#### Exposure Calculation
+
+- When calculating ETH exposure: `spot ETH + WBETH holdings = total ETH exposure`
+- When calculating SOL exposure: `spot SOL + BNSOL holdings = total SOL exposure`
+- RWUSD is **never** counted in portfolio (must redeem to USDC first)
+
+### 4. Strategy Editing via UI (Optional - Phase 2)
 
 - Requires read-only dashboard to be complete first
 - Allows updating allocation percentages via web UI
@@ -92,15 +133,25 @@ The strategy can come from **either** config file **or** database — never both
 #### Tasks
 
 1. **Define core domain types** (`packages/core/types.ts`)
-   - `AssetBalance` - Current holdings per asset
+   - `AssetBalance` - Current holdings per asset (includes `category` and `representsExposureTo`)
    - `PortfolioSnapshot` - Point-in-time portfolio state
-   - `EarnPosition` - Staking/locked/flex positions
+   - `EarnPosition` - Staking/locked/flex positions (includes liquid staking derivative info)
    - `TradeOrder` - Buy/sell order representation
    - `RunResult` - Execution summary
    - `Action` - Recorded action (buy, sell, subscribe, etc.)
    - `RebalanceResult` - Yearly rebalancing outcome
+   - `TokenCategory` - "base" | "liquid_staking" | "non_tradable"
 
-2. **Define adapter interfaces**
+2. **Implement exposure utilities** (`packages/core/exposure.ts`)
+   - `ExposureUtils` class with config-driven lookups
+   - `createDerivativeLookups()` - Build lookup maps from config
+   - `getTokenCategory()` - Determine token type
+   - `calculateEffectiveExposure()` - Combine base + derivative exposure
+   - `filterTradableBalances()` - Exclude non-tradable wrappers
+   - `canTradeLiquidStakingDerivative()` - Check if trading is allowed
+   - `determineTradeAsset()` - Choose correct asset for rebalancing
+
+3. **Define adapter interfaces**
    - `ExchangeAdapter` (`packages/exchange/adapter.ts`)
      - `getBalances(): Promise<AssetBalance[]>`
      - `getEarnPositions(): Promise<EarnPosition[]>`
@@ -122,13 +173,13 @@ The strategy can come from **either** config file **or** database — never both
      - `validatePlan(actions: Action[]): Promise<ValidationResult>`
      - `summarizeRun(run: RunResult): Promise<string>`
 
-3. **Complete strategy schema** (`packages/strategy/schema.ts`)
+4. **Complete strategy schema** (`packages/strategy/schema.ts`)
    - Finalize all Zod schemas
    - Add rebalancing configuration
    - Add refinements and constraints
    - Export inferred TypeScript types
 
-4. **Implement strategy loader** (`packages/strategy/loader.ts`)
+5. **Implement strategy loader** (`packages/strategy/loader.ts`)
    - Load from YAML configuration OR database (based on flags)
    - Validate against schema
    - Return typed configuration

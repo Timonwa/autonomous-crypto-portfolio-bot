@@ -1,5 +1,9 @@
 monthlyInvestmentUsd: 175
 
+# ---- Target Allocation ----
+# Only BASE assets are allocated. Liquid staking derivatives (WBETH, BNSOL)
+# represent the SAME exposure as their base asset.
+# Non-tradable wrappers (RWUSD) are NOT counted in portfolio.
 allocation:
   BTC: 0.45
   ETH: 0.30
@@ -12,12 +16,12 @@ earnRules:
     flex: 1.0
 
   ETH:
-    staking: 0.5
+    staking: 0.5 # Issues WBETH (liquid staking derivative)
     locked: 0.3
     flex: 0.2
 
   SOL:
-    staking: 0.6
+    staking: 0.6 # Issues BNSOL (liquid staking derivative)
     locked: 0.2
     flex: 0.2
 
@@ -26,13 +30,40 @@ earnRules:
     flex: 0.3
 
   USDT:
-    locked: 0.6
+    locked: 0.6 # Issues RWUSD (non-tradable, must redeem)
     flex: 0.4
+
+# ---- Staking Derivatives ----
+# FULLY CONFIGURABLE: Define your own derivatives for any asset.
+# Users with different portfolios can define their own derivatives here.
+#
+# Types:
+#   - liquid: Tradable derivatives (trading exits staking exposure)
+#   - non_tradable: Must redeem first, cannot trade directly
+#
+# Each entry maps a BASE asset to its derivative token.
+stakingDerivatives:
+  ETH:
+    symbol: WBETH
+    type: liquid
+    description: "Wrapped staked ETH - tradable, represents staking exposure"
+
+  SOL:
+    symbol: BNSOL
+    type: liquid
+    description: "Staked SOL derivative - tradable"
+
+  USDT:
+    symbol: RWUSD
+    type: non_tradable
+    redeemsTo: USDC
+    description: "Must redeem to USDC first, then trade"
 
 safety:
   maxLockedPercentage: 0.8
   minFlexPercentage: 0.2
   allowSell: false # Set to true only during rebalancing
+  allowLiquidStakingTrades: false # Set to true only during rebalancing
   allowFutures: false
   allowMargin: false
   allowStructuredProducts: false

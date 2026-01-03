@@ -43,6 +43,7 @@ export interface ExchangeAdapter {
 
   /**
    * Subscribe to an earn product (staking, locked, or flex).
+   * Returns the representative token issued (if any).
    */
   subscribeEarn(
     asset: AssetSymbol,

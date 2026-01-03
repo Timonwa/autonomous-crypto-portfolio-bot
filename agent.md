@@ -114,11 +114,61 @@ All strategy decisions are defined via configuration:
 - monthly investment amount,
 - asset allocation percentages,
 - earn distribution percentages,
+- staking derivatives mapping (see below),
 - safety constraints,
 - schedule.
 
 Configuration is treated as **law**.
 The system must fail fast if configuration is invalid.
+
+---
+
+## Staking Derivatives Configuration
+
+When assets are staked, exchanges may issue **derivative tokens** to represent the staked position. This system supports **fully configurable** staking derivatives.
+
+### Derivative Types
+
+1. **Liquid Staking Derivatives** (`type: liquid`)
+   - Tradable tokens that represent staking exposure
+   - Examples: WBETH (staked ETH), BNSOL (staked SOL)
+   - Trading these tokens = exiting staking exposure
+   - Treat base asset + derivative as the **same exposure**
+   - Only trade during yearly rebalancing or strategy changes
+
+2. **Non-Tradable Wrappers** (`type: non_tradable`)
+   - Cannot be traded directly
+   - Must be redeemed to another asset first
+   - Example: RWUSD (redeems to USDC)
+   - **Never count** these as portfolio assets
+   - **Never attempt** to rebalance these directly
+
+### Configuration Format
+
+```yaml
+stakingDerivatives:
+  ETH:
+    symbol: WBETH           # The derivative token
+    type: liquid            # liquid or non_tradable
+    description: "Staked ETH"
+  
+  SOL:
+    symbol: BNSOL
+    type: liquid
+  
+  USDT:
+    symbol: RWUSD
+    type: non_tradable
+    redeemsTo: USDC         # Required for non_tradable
+```
+
+### Key Rules
+
+- **Dynamic**: No hardcoded asset symbols. Users define their own derivatives.
+- **Exposure**: Base asset + liquid derivative = same exposure (never both active)
+- **Trading**: Liquid derivatives can only be traded during rebalancing
+- **Portfolio**: Non-tradable wrappers are excluded from portfolio calculations
+- **Safety**: `allowLiquidStakingTrades: false` prevents accidental exits
 
 ---
 

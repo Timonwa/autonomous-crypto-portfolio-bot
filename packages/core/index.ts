@@ -11,8 +11,12 @@ export type {
   RebalanceResult,
   RunResult,
   RunType,
+  TokenCategory,
   TradeOrder,
   TradeResult,
   ValidationResult,
 } from "./types";
 export * from "./types";
+
+// ---- Exposure Utilities ----
+export * from "./exposure";

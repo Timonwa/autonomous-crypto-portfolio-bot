@@ -6,12 +6,23 @@
 export type AssetSymbol = string;
 
 /**
+ * ---- Token Category ----
+ * Distinguishes between different types of tokens
+ */
+export type TokenCategory =
+  | "base" // Regular tradable assets (BTC, ETH, SOL, BNB, USDT)
+  | "liquid_staking" // Tradable staking derivatives (WBETH, BNSOL) - represent staking exposure
+  | "non_tradable"; // Non-tradable wrappers (RWUSD) - must be redeemed, not in portfolio
+
+/**
  * ---- Asset Balance ----
  * Current holdings of a single asset
  */
 export interface AssetBalance {
   /** Asset symbol (BTC, ETH, etc.) */
   asset: AssetSymbol;
+  /** Category of this token */
+  category: TokenCategory;
   /** Free balance available for trading/earn */
   free: number;
   /** Locked balance (in orders, earn products, etc.) */
@@ -20,6 +31,11 @@ export interface AssetBalance {
   total: number;
   /** Estimated value in USD */
   usdValue: number;
+  /**
+   * For liquid staking derivatives: the base asset this represents exposure to
+   * e.g., WBETH -> ETH, BNSOL -> SOL
+   */
+  representsExposureTo?: AssetSymbol;
 }
 
 /**
@@ -43,6 +59,22 @@ export interface EarnPosition {
   unlockDate?: Date;
   /** Whether this position can be redeemed early */
   canRedeem: boolean;
+  /**
+   * For liquid staking: the derivative token issued (e.g., WBETH for ETH staking)
+   * These are tradable and represent your staking exposure.
+   * Trading them = exiting staking exposure.
+   */
+  liquidStakingToken?: AssetSymbol;
+  /** Amount of liquid staking tokens received */
+  liquidStakingTokenAmount?: number;
+  /**
+   * For non-tradable products: the wrapper token issued (e.g., RWUSD)
+   * These CANNOT be traded - must be redeemed first.
+   * Never count these as portfolio assets.
+   */
+  nonTradableWrapper?: AssetSymbol;
+  /** Amount locked in non-tradable wrapper */
+  nonTradableWrapperAmount?: number;
 }
 
 /**
@@ -111,6 +143,20 @@ export interface EarnResult {
   positionId?: string;
   /** Amount subscribed */
   amount?: number;
+  /**
+   * Liquid staking derivative issued (tradable, represents staking exposure)
+   * e.g., WBETH, BNSOL
+   */
+  liquidStakingToken?: AssetSymbol;
+  /** Amount of liquid staking tokens received */
+  liquidStakingTokenAmount?: number;
+  /**
+   * Non-tradable wrapper issued (must be redeemed, not tradable)
+   * e.g., RWUSD
+   */
+  nonTradableWrapper?: AssetSymbol;
+  /** Amount locked in non-tradable wrapper */
+  nonTradableWrapperAmount?: number;
   /** Error message if failed */
   error?: string;
 }

@@ -1,9 +1,4 @@
-import type {
-  Action,
-  PortfolioSnapshot,
-  RunResult,
-  ValidationResult,
-} from "@bot/core";
+import type { Action, PortfolioSnapshot, RunResult, ValidationResult } from "@bot/core";
 
 /**
  * ---- AI Adapter Interface ----
@@ -71,11 +66,7 @@ export interface PortfolioInsight {
  */
 export interface AnomalyDetection {
   /** Type of anomaly */
-  type:
-    | "price_movement"
-    | "balance_discrepancy"
-    | "execution_failure"
-    | "unexpected_state";
+  type: "price_movement" | "balance_discrepancy" | "execution_failure" | "unexpected_state";
   /** Severity level */
   severity: "low" | "medium" | "high";
   /** Description of the anomaly */

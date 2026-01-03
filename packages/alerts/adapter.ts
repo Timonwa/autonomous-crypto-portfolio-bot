@@ -9,9 +9,7 @@ export interface AlertAdapter {
   /**
    * Send notification that a run has started.
    */
-  sendRunStarted(
-    runType: "monthly_investment" | "yearly_rebalance"
-  ): Promise<void>;
+  sendRunStarted(runType: "monthly_investment" | "yearly_rebalance"): Promise<void>;
 
   /**
    * Send notification that a run completed successfully.
@@ -38,10 +36,7 @@ export interface AlertAdapter {
    * Send anomaly detection alert.
    * Used when something unexpected is detected.
    */
-  sendAnomaly(
-    description: string,
-    severity: "low" | "medium" | "high"
-  ): Promise<void>;
+  sendAnomaly(description: string, severity: "low" | "medium" | "high"): Promise<void>;
 
   /**
    * Check if alerts are properly configured and working.

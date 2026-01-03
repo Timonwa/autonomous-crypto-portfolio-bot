@@ -4,7 +4,22 @@ import { z } from "zod";
  * ---- Core Domain Types ----
  */
 
-export const AssetSymbol = z.enum(["BTC", "ETH", "SOL", "BNB", "USDT"]);
+/**
+ * Asset symbols are FULLY DYNAMIC - not hardcoded enums.
+ * Users can define any cryptocurrency and its derivatives via configuration.
+ *
+ * Token Categories:
+ *   - base: Regular tradable cryptocurrencies (BTC, ETH, SOL, etc.)
+ *   - liquid_staking: Tradable tokens representing staking exposure (WBETH, BNSOL)
+ *   - non_tradable: Must be redeemed, not counted in portfolio (RWUSD)
+ *
+ * All token relationships are defined in the strategy config file.
+ */
+export const AssetSymbol = z
+  .string()
+  .min(1, "Asset symbol cannot be empty")
+  .max(20, "Asset symbol too long")
+  .regex(/^[A-Z0-9]+$/, "Asset symbol must be uppercase alphanumeric");
 
 export type AssetSymbol = z.infer<typeof AssetSymbol>;
 
@@ -27,8 +42,9 @@ export const EarnSplitSchema = z
     flex: z.number().min(0).max(1).optional(),
   })
   .refine(
-    (split) => {
-      const total = (split.staking ?? 0) + (split.locked ?? 0) + (split.flex ?? 0);
+    split => {
+      const total =
+        (split.staking ?? 0) + (split.locked ?? 0) + (split.flex ?? 0);
       return total <= 1.0001; // Allow small floating point error
     },
     { message: "Earn split percentages must not exceed 1.0" }
@@ -41,6 +57,58 @@ export const EarnRulesSchema = z.record(AssetSymbol, EarnSplitSchema);
 export type EarnRules = z.infer<typeof EarnRulesSchema>;
 
 /**
+ * ---- Staking Derivatives ----
+ * Unified configuration for all derivative tokens (liquid staking + non-tradable).
+ * This is FULLY CONFIGURABLE - users define their own derivatives.
+ *
+ * Types:
+ *   - liquid: Tradable derivatives (WBETH, BNSOL) - trading exits staking
+ *   - non_tradable: Must redeem first (RWUSD) - cannot trade directly
+ *
+ * Example Configuration:
+ *   stakingDerivatives:
+ *     ETH:
+ *       symbol: WBETH
+ *       type: liquid
+ *       description: "Wrapped staked ETH"
+ *     SOL:
+ *       symbol: BNSOL
+ *       type: liquid
+ *     USDT:
+ *       symbol: RWUSD
+ *       type: non_tradable
+ *       redeemsTo: USDC
+ */
+export const StakingDerivativeTypeSchema = z.enum(["liquid", "non_tradable"]);
+
+export type StakingDerivativeType = z.infer<typeof StakingDerivativeTypeSchema>;
+
+export const StakingDerivativeSchema = z.object({
+  /** The derivative token symbol (e.g., WBETH, BNSOL, RWUSD) */
+  symbol: AssetSymbol,
+  /** Type of derivative: liquid (tradable) or non_tradable (must redeem) */
+  type: StakingDerivativeTypeSchema,
+  /** For non_tradable: which asset it redeems to (e.g., RWUSD → USDC) */
+  redeemsTo: AssetSymbol.optional(),
+  /** Optional human-readable description */
+  description: z.string().optional(),
+});
+
+export type StakingDerivative = z.infer<typeof StakingDerivativeSchema>;
+
+/**
+ * Map of base assets to their staking derivatives.
+ * Key: base asset symbol (e.g., ETH, SOL, USDT)
+ * Value: derivative configuration
+ */
+export const StakingDerivativesSchema = z.record(
+  AssetSymbol,
+  StakingDerivativeSchema
+);
+
+export type StakingDerivatives = z.infer<typeof StakingDerivativesSchema>;
+
+/**
  * ---- Safety Constraints ----
  * Non-negotiable rules that protect the user
  */
@@ -51,6 +119,15 @@ export const SafetyRulesSchema = z.object({
   minFlexPercentage: z.number().min(0).max(1).default(0.2),
   /** Allow selling - only true during rebalancing */
   allowSell: z.boolean().default(false),
+  /**
+   * Allow trading liquid staking derivatives (WBETH, BNSOL).
+   * Trading these = exiting staking exposure.
+   * Should only be true during:
+   *   - Yearly rebalancing
+   *   - Explicit strategy changes
+   * NEVER true during normal monthly runs.
+   */
+  allowLiquidStakingTrades: z.boolean().default(false),
   /** Never allow futures trading */
   allowFutures: z.literal(false),
   /** Never allow margin trading */
@@ -67,9 +144,11 @@ export type SafetyRules = z.infer<typeof SafetyRulesSchema>;
 export const ScheduleSchema = z.object({
   type: z.literal("cron"),
   /** Cron expression, e.g. "0 9 3 * *" for 9 AM on the 3rd of each month */
-  expression: z.string().regex(/^[\d*,/-]+ [\d*,/-]+ [\d*,/-]+ [\d*,/-]+ [\d*,/-]+$/, {
-    message: "Invalid cron expression format",
-  }),
+  expression: z
+    .string()
+    .regex(/^[\d*,/-]+ [\d*,/-]+ [\d*,/-]+ [\d*,/-]+ [\d*,/-]+$/, {
+      message: "Invalid cron expression format",
+    }),
 });
 
 export type Schedule = z.infer<typeof ScheduleSchema>;
@@ -101,7 +180,7 @@ export const StrategySchema = z.object({
 
   /** Target allocation percentages per asset (must sum to 1.0) */
   allocation: AllocationSchema.refine(
-    (alloc) => {
+    alloc => {
       const total = Object.values(alloc).reduce((a, b) => a + b, 0);
       return Math.abs(total - 1) < 0.0001;
     },
@@ -110,6 +189,22 @@ export const StrategySchema = z.object({
 
   /** How each asset should be distributed across earn products */
   earnRules: EarnRulesSchema,
+
+  /**
+   * Staking derivatives configuration.
+   * Maps base assets to their derivative tokens.
+   * FULLY CONFIGURABLE - users can define any asset's derivatives.
+   *
+   * Types:
+   *   - liquid: Tradable derivatives (WBETH, BNSOL) - trading exits staking
+   *   - non_tradable: Must redeem first (RWUSD) - cannot trade directly
+   *
+   * Example:
+   *   stakingDerivatives:
+   *     ETH: { symbol: WBETH, type: liquid }
+   *     USDT: { symbol: RWUSD, type: non_tradable, redeemsTo: USDC }
+   */
+  stakingDerivatives: StakingDerivativesSchema.optional(),
 
   /** Safety constraints (non-negotiable) */
   safety: SafetyRulesSchema,
