@@ -5,6 +5,7 @@ export type {
   Action,
   ActionType,
   AssetBalance,
+  AssetSymbol,
   EarnPosition,
   EarnResult,
   PortfolioSnapshot,
@@ -19,4 +20,5 @@ export type {
 export * from "./types";
 
 // ---- Exposure Utilities ----
+export type { StakingDerivative, StakingDerivativesConfig } from "./exposure";
 export * from "./exposure";

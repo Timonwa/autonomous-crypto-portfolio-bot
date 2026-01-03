@@ -11,6 +11,9 @@ export type {
   Rebalance,
   SafetyRules,
   Schedule,
+  StakingDerivative,
+  StakingDerivativeType,
+  StakingDerivatives,
   Strategy,
 } from "./schema";
 export * from "./schema";
