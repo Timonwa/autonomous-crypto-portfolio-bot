@@ -3,9 +3,9 @@ monthlyInvestmentUsd: 175
 allocation:
   BTC: 0.45
   ETH: 0.30
+  USDT: 0.15
   SOL: 0.05
   BNB: 0.05
-  USDT: 0.15
 
 earnRules:
   BTC:
@@ -39,4 +39,4 @@ safety:
 
 schedule:
   type: cron
-  expression: "0 9 1 * *"
+  expression: "0 9 3 * *"
